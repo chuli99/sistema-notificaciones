@@ -27,7 +27,7 @@ class EmailService:
         try:
             msg = MIMEText(cuerpo, 'html')
             msg['Subject'] = asunto
-            msg['From'] = formataddr(("Sistema de Notificaciones", "smtp-relay@gmail.com")) #Aqui deben cambiar con la config del servidor SMTP
+            msg['From'] = formataddr(("Sistema de Notificaciones", os.getenv('SMTP_USER'))) #Aqui deben cambiar con la config del servidor SMTP
             msg['To'] = destinatario
 
             with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
