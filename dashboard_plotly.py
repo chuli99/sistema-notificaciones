@@ -8,6 +8,15 @@ from database_config import db_config
 import logging
 import dash
 from dash import dcc, html, Input, Output, callback
+import os
+from dotenv import load_dotenv
+import warnings
+
+# Suprimir warning específico de deprecación de pandas/plotly
+warnings.filterwarnings('ignore', category=FutureWarning, module='_plotly_utils.basevalidators')
+
+# Cargar variables de entorno
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +120,9 @@ class DashboardNotificacionesPlotly:
         # Convertir a DataFrame
         df = pd.DataFrame(datos['resultados'])
         df['Fecha'] = pd.to_datetime(df['Fecha'])
+        
+        # Convertir fechas a formato numpy array para evitar warning de deprecación
+        df['Fecha'] = np.array(df['Fecha'].dt.to_pydatetime())
         
         # Crear figura
         fig = go.Figure()
@@ -275,6 +287,9 @@ class DashboardNotificacionesPlotly:
             df = pd.DataFrame(datos['resultados'])
             df['Fecha'] = pd.to_datetime(df['Fecha'])
             
+            # Convertir fechas a formato numpy array para evitar warning de deprecación
+            df['Fecha'] = np.array(df['Fecha'].dt.to_pydatetime())
+            
             tipos_unicos = df['TipoDescripcion'].unique()
             colores = px.colors.qualitative.Set3[:len(tipos_unicos)]
             
@@ -382,6 +397,16 @@ def crear_dashboard_dash():
         return fig_lineas, fig_dona
     
     return app
+
+# Crear una instancia global de la aplicación Dash para ser usada externamente
+app = crear_dashboard_dash()
+
+def get_dashboard_config():
+    """Obtiene la configuración del dashboard desde las variables de entorno"""
+    return {
+        'host': os.getenv('DASHBOARD_HOST', '0.0.0.0'),
+        'port': int(os.getenv('DASHBOARD_PORT', '8050'))
+    }
 
 def generar_dashboard_simple_plotly(periodo='1_mes'):
     """
