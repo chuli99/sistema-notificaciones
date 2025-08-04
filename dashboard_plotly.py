@@ -7,7 +7,8 @@ from datetime import datetime, timedelta
 from database_config import db_config
 import logging
 import dash
-from dash import dcc, html, Input, Output, callback
+from dash import dcc, html, Input, Output, callback, State
+from dash.exceptions import PreventUpdate
 import os
 from dotenv import load_dotenv
 import warnings
@@ -24,6 +25,48 @@ class DashboardNotificacionesPlotly:
     def __init__(self):
         self.periodo_actual = '1_mes'
         self.datos_cache = {}
+    
+    def obtener_tipos_notificacion(self):
+        """
+        Obtiene los tipos de notificación disponibles
+        """
+        query = """
+        SELECT IdTipoNotificacion, descripcion 
+        FROM Notificaciones_Tipo 
+        ORDER BY descripcion
+        """
+        try:
+            resultados = db_config.execute_query(query)
+            return resultados
+        except Exception as e:
+            logger.error(f"Error al obtener tipos de notificación: {e}")
+            return []
+    
+    def crear_notificacion(self, tipo_id, asunto, cuerpo, destinatarios, fecha_programada=None):
+        """
+        Crea una nueva notificación
+        """
+        query = """
+        INSERT INTO Notificaciones (IdTipoNotificacion, Asunto, Cuerpo, Destinatario, Estado, Fecha_Programada)
+        VALUES (?, ?, ?, ?, 'pendiente', ?)
+        """
+        try:
+            params = [
+                tipo_id if tipo_id else None,
+                asunto if asunto.strip() else None,
+                cuerpo if cuerpo.strip() else None,
+                destinatarios if destinatarios.strip() else None,
+                fecha_programada if fecha_programada else None
+            ]
+            
+            db_config.execute_non_query(query, params)
+            
+            fecha_info = f" programada para {fecha_programada}" if fecha_programada else " para envío inmediato"
+            logger.info(f"Notificación creada exitosamente - Tipo: {tipo_id}{fecha_info}")
+            return True, "Notificación creada exitosamente"
+        except Exception as e:
+            logger.error(f"Error al crear notificación: {e}")
+            return False, f"Error al crear la notificación: {str(e)}"
         
     def obtener_datos_por_periodo(self, periodo='1_mes'):
         """
@@ -357,9 +400,96 @@ def crear_dashboard_dash():
     app = dash.Dash(__name__)
     dashboard = DashboardNotificacionesPlotly()
     
+    # Obtener tipos de notificación para el dropdown
+    tipos = dashboard.obtener_tipos_notificacion()
+    opciones_tipos = [{'label': tipo['descripcion'], 'value': tipo['IdTipoNotificacion']} for tipo in tipos]
+    
     app.layout = html.Div([
         html.H1("Dashboard de Notificaciones del Sistema", 
                 style={'textAlign': 'center', 'marginBottom': 30}),
+        
+        # Sección de creación de notificaciones
+        html.Div([
+            html.H3("🔔 Crear Nueva Notificación", 
+                   style={'color': '#2c3e50', 'borderBottom': '2px solid #3498db', 'paddingBottom': '10px'}),
+            
+            html.Div([
+                html.Div([
+                    html.Label("Tipo de Notificación:", style={'fontWeight': 'bold', 'marginBottom': '5px'}),
+                    dcc.Dropdown(
+                        id='tipo-notificacion-dropdown',
+                        options=opciones_tipos,
+                        placeholder="Seleccione un tipo de notificación...",
+                        style={'marginBottom': '15px'}
+                    ),
+                    
+                    html.Label("Asunto (Opcional):", style={'fontWeight': 'bold', 'marginBottom': '5px'}),
+                    dcc.Input(
+                        id='asunto-input',
+                        type='text',
+                        placeholder='Deje vacío para usar el asunto por defecto del tipo',
+                        style={'width': '100%', 'marginBottom': '15px', 'padding': '8px'}
+                    ),
+                    
+                    html.Label("Destinatarios Adicionales (Opcional):", style={'fontWeight': 'bold', 'marginBottom': '5px'}),
+                    dcc.Input(
+                        id='destinatarios-input',
+                        type='email',
+                        placeholder='email1@ejemplo.com, email2@ejemplo.com',
+                        style={'width': '100%', 'marginBottom': '15px', 'padding': '8px'}
+                    ),
+                    
+                    html.Label("Fecha Programada:", style={'fontWeight': 'bold', 'marginBottom': '5px'}),
+                    dcc.DatePickerSingle(
+                        id='fecha-programada-picker',
+                        placeholder='Seleccionar fecha de envío',
+                        display_format='DD/MM/YYYY',
+                        style={'width': '100%', 'marginBottom': '15px'}
+                    ),
+                    html.Small("Si no selecciona fecha, se enviará inmediatamente", 
+                              style={'color': '#666', 'fontSize': '12px', 'display': 'block', 'marginBottom': '15px'}),
+                ], style={'width': '48%', 'display': 'inline-block', 'verticalAlign': 'top'}),
+                
+                html.Div([
+                    html.Label("Cuerpo del Mensaje (Opcional):", style={'fontWeight': 'bold', 'marginBottom': '5px'}),
+                    dcc.Textarea(
+                        id='cuerpo-textarea',
+                        placeholder='Deje vacío para usar el cuerpo por defecto del tipo. Puede usar HTML básico.',
+                        style={'width': '100%', 'height': '120px', 'marginBottom': '15px', 'padding': '8px'}
+                    ),
+                    
+                    html.Button(
+                        '📧 Crear Notificación', 
+                        id='crear-notificacion-btn',
+                        style={
+                            'backgroundColor': '#27ae60', 
+                            'color': 'white', 
+                            'border': 'none',
+                            'padding': '12px 24px',
+                            'fontSize': '16px',
+                            'borderRadius': '5px',
+                            'cursor': 'pointer',
+                            'width': '100%'
+                        }
+                    ),
+                ], style={'width': '48%', 'display': 'inline-block', 'marginLeft': '4%', 'verticalAlign': 'top'}),
+            ]),
+            
+            # Div para mostrar mensajes de resultado
+            html.Div(id='mensaje-resultado', style={'marginTop': '15px'}),
+            
+        ], style={
+            'margin': '20px', 
+            'padding': '20px', 
+            'border': '1px solid #bdc3c7', 
+            'borderRadius': '8px',
+            'backgroundColor': '#f8f9fa'
+        }),
+        
+        # Sección de análisis existente
+        html.Hr(style={'margin': '30px 0'}),
+        html.H3("📊 Análisis de Notificaciones", 
+               style={'color': '#2c3e50', 'textAlign': 'center', 'marginBottom': '20px'}),
         
         html.Div([
             html.Label("Seleccionar Período:", style={'fontWeight': 'bold'}),
@@ -396,10 +526,94 @@ def crear_dashboard_dash():
         fig_dona = dashboard.crear_grafico_dona()
         return fig_lineas, fig_dona
     
+    @app.callback(
+        Output('mensaje-resultado', 'children'),
+        [Input('crear-notificacion-btn', 'n_clicks')],
+        [State('tipo-notificacion-dropdown', 'value'),
+         State('asunto-input', 'value'),
+         State('cuerpo-textarea', 'value'),
+         State('destinatarios-input', 'value'),
+         State('fecha-programada-picker', 'date')],
+        prevent_initial_call=True
+    )
+    def crear_nueva_notificacion(n_clicks, tipo_id, asunto, cuerpo, destinatarios, fecha_programada):
+        if n_clicks is None or n_clicks == 0:
+            raise PreventUpdate
+        
+        try:
+            # Validar que se haya seleccionado un tipo
+            if not tipo_id:
+                return html.Div([
+                    html.P("❌ Error: Debe seleccionar un tipo de notificación", 
+                           style={'color': 'red', 'fontWeight': 'bold', 'margin': '0'})
+                ])
+            
+            # Procesar fecha programada
+            fecha_prog_procesada = None
+            if fecha_programada:
+                from datetime import datetime
+                try:
+                    # Convertir string de fecha a datetime
+                    fecha_prog_procesada = datetime.strptime(fecha_programada, '%Y-%m-%d')
+                    
+                    # Validar que la fecha no sea pasada
+                    if fecha_prog_procesada.date() < datetime.now().date():
+                        return html.Div([
+                            html.P("❌ Error: La fecha programada no puede ser anterior a hoy", 
+                                   style={'color': 'red', 'fontWeight': 'bold', 'margin': '0'})
+                        ])
+                except ValueError:
+                    return html.Div([
+                        html.P("❌ Error: Formato de fecha inválido", 
+                               style={'color': 'red', 'fontWeight': 'bold', 'margin': '0'})
+                    ])
+            
+            # Crear la notificación
+            exito, mensaje = dashboard.crear_notificacion(
+                tipo_id=tipo_id,
+                asunto=asunto or '',
+                cuerpo=cuerpo or '',
+                destinatarios=destinatarios or '',
+                fecha_programada=fecha_prog_procesada
+            )
+            
+            if exito:
+                mensaje_adicional = ""
+                if fecha_prog_procesada:
+                    mensaje_adicional = f" Se enviará el {fecha_prog_procesada.strftime('%d/%m/%Y')}."
+                else:
+                    mensaje_adicional = " Será procesada inmediatamente."
+                
+                return html.Div([
+                    html.P(f"✅ {mensaje}", 
+                           style={'color': 'green', 'fontWeight': 'bold', 'margin': '0'}),
+                    html.P(f"La notificación ha sido programada exitosamente.{mensaje_adicional}", 
+                           style={'color': '#666', 'fontSize': '14px', 'margin': '5px 0 0 0'})
+                ])
+            else:
+                return html.Div([
+                    html.P(f"❌ {mensaje}", 
+                           style={'color': 'red', 'fontWeight': 'bold', 'margin': '0'})
+                ])
+                
+        except Exception as e:
+            logger.error(f"Error en callback crear_nueva_notificacion: {e}")
+            return html.Div([
+                html.P("❌ Error interno del sistema. Revise los logs del servidor.", 
+                       style={'color': 'red', 'fontWeight': 'bold', 'margin': '0'})
+            ])
+    
     return app
 
 # Crear una instancia global de la aplicación Dash para ser usada externamente
-app = crear_dashboard_dash()
+app = None
+
+def get_app():
+    """Obtiene o crea la instancia de la aplicación Dash"""
+    global app
+    if app is None:
+        app = crear_dashboard_dash()
+    return app
 
 def get_dashboard_config():
     """Obtiene la configuración del dashboard desde las variables de entorno"""
@@ -438,16 +652,22 @@ def generar_reportes_individuales_plotly():
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     
-    print("Generando Dashboard de Notificaciones con Plotly...")
+    print("🚀 Iniciando Dashboard Interactivo de Notificaciones...")
+    print("Características incluidas:")
+    print("  📊 Análisis visual de notificaciones")
+    print("  🔔 Creación de nuevas notificaciones")
+    print("  📈 Gráficos en tiempo real")
+    print("  🎯 Filtrado por períodos")
     
-    # Opción 1: Dashboard estático simple
-    generar_dashboard_simple_plotly('1_mes')
+    # Dashboard interactivo con Dash (recomendado)
+    app_instance = get_app()
+    config = get_dashboard_config()
     
-    # Opción 2: Dashboard interactivo con Dash (descomenta para usar)
-    # app = crear_dashboard_dash()
-    # app.run(debug=True)
+    print(f"🌐 Dashboard disponible en: http://{config['host']}:{config['port']}")
+    print("💡 Presiona Ctrl+C para detener el servidor")
     
-    # Opción 3: Gráficos individuales (descomenta para usar)
-    # generar_reportes_individuales_plotly()
-    
-    print("Dashboard generado exitosamente!")
+    app_instance.run(
+        debug=True,
+        host=config['host'], 
+        port=config['port']
+    )

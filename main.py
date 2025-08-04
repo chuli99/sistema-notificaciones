@@ -1,5 +1,5 @@
 from alertas_service import ProcesadorNotificaciones
-from dashboard_plotly import app as dash_app
+from dashboard_plotly import get_app
 import time
 import logging
 import threading
@@ -40,7 +40,8 @@ def start_dashboard():
     logger.info("=" * 60)
     
     try:
-        dash_app.run_server(host=host, port=port, debug=False)
+        dash_app = get_app()
+        dash_app.run(host=host, port=port, debug=False)
     except Exception as e:
         logger.error(f"❌ Error al iniciar dashboard: {e}")
 
