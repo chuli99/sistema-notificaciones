@@ -61,8 +61,8 @@ class DashboardNotificacionesPlotly:
             
             db_config.execute_non_query(query, params)
             
-            fecha_info = f" programada para {fecha_programada}" if fecha_programada else " para envío inmediato"
-            logger.info(f"Notificación creada exitosamente - Tipo: {tipo_id}{fecha_info}")
+            fecha_info = f" programada para {fecha_programada.strftime('%d/%m/%Y')}" if fecha_programada else " inmediata"
+            logger.info(f"Notificación creada - Tipo: {tipo_id}{fecha_info}")
             return True, "Notificación creada exitosamente"
         except Exception as e:
             logger.error(f"Error al crear notificación: {e}")
@@ -446,7 +446,7 @@ def crear_dashboard_dash():
                         display_format='DD/MM/YYYY',
                         style={'width': '100%', 'marginBottom': '15px'}
                     ),
-                    html.Small("Si no selecciona fecha, se enviará inmediatamente", 
+                    html.Small("Si no selecciona fecha, se enviará inmediatamente. Las notificaciones se procesan a partir del día seleccionado (cualquier hora).", 
                               style={'color': '#666', 'fontSize': '12px', 'display': 'block', 'marginBottom': '15px'}),
                 ], style={'width': '48%', 'display': 'inline-block', 'verticalAlign': 'top'}),
                 

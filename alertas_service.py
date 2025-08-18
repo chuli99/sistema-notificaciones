@@ -12,14 +12,14 @@ class ProcesadorNotificaciones:
         """
         Procesa todas las notificaciones pendientes y maneja el envío
         """
-        logger.info("Iniciando procesamiento de notificaciones pendientes...")
+        logger.info("🚀 Iniciando procesamiento de notificaciones...")
         notificaciones = NotificacionesService.obtener_notificaciones_pendientes()
         
         if not notificaciones:
-            logger.info("No hay notificaciones pendientes para procesar")
+            logger.info("✅ No hay notificaciones pendientes")
             return
         
-        logger.info(f"Procesando {len(notificaciones)} notificaciones...")
+        logger.info(f"📧 Procesando {len(notificaciones)} notificaciones...")
         
         for notif in notificaciones:
             try:
@@ -27,12 +27,7 @@ class ProcesadorNotificaciones:
                 if 'error' in notif:
                     raise ValueError(notif['error'])
                 
-                # Log con información de fecha programada
-                fecha_prog_info = ""
-                if notif['fecha_programada']:
-                    fecha_prog_info = f" (programada para: {notif['fecha_programada']})"
-                
-                logger.info(f"Enviando notificación ID: {notif['IdNotificacion']} a {notif['destinatarios']}{fecha_prog_info}")
+                logger.info(f"Enviando ID {notif['IdNotificacion']} → {notif['destinatarios']}")
                 
                 # Enviar email a múltiples destinatarios
                 destinatarios_lista = [email.strip() for email in notif['destinatarios'].split(',') if email.strip()]
@@ -62,20 +57,19 @@ class ProcesadorNotificaciones:
                 
                 if exito_general:
                     # Actualizar estado y auditoría
-                    estado_mensaje = f"Enviado a {exitos}/{len(destinatarios_lista)} destinatarios"
-                    if errores:
-                        estado_mensaje += f". Errores: {'; '.join(errores)}"
+                    estado_final = 'enviado' if not errores else 'parcial'
+                    estado_mensaje = f"{exitos}/{len(destinatarios_lista)} enviados"
                     
                     NotificacionesService.actualizar_estado_notificacion(
-                        notif['IdNotificacion'], 'enviado' if not errores else 'parcial')
+                        notif['IdNotificacion'], estado_final)
                     NotificacionesService.registrar_auditoria(
                         notif['IdNotificacion'], 
                         'NOTIFICACION_ENVIADA',
                         estado_mensaje
                     )
-                    logger.info(f"Notificación {notif['IdNotificacion']} procesada: {estado_mensaje}")
+                    logger.info(f"✅ ID {notif['IdNotificacion']}: {estado_mensaje}")
                 else:
-                    raise Exception(f"Error al enviar a todos los destinatarios: {'; '.join(errores)}")
+                    raise Exception(f"Falló envío a todos los destinatarios")
                 
             except Exception as e:
                 # Manejo de errores
@@ -86,7 +80,7 @@ class ProcesadorNotificaciones:
                     'ERROR_NOTIFICACION',
                     f"Error: {str(e)}"
                 )
-                logger.error(f"Error procesando notificación {notif['IdNotificacion']}: {str(e)}")
+                logger.error(f"❌ ID {notif['IdNotificacion']}: {str(e)}")
 
 class NotificacionesService:
     """
@@ -96,7 +90,9 @@ class NotificacionesService:
     @staticmethod
     def obtener_notificaciones_pendientes():
         """
-        Se deben obtiener todas las notificaciones pendientes que no han sido enviadas.
+        Obtiene notificaciones que están programadas para HOY (o anterior) y están pendientes.
+        LÓGICA OPTIMIZADA: PRIMERO verifica la fecha (solo día, ignora hora), LUEGO verifica el estado.
+        Esto es más intuitivo para usuarios que seleccionan solo fechas en el dashboard.
         """
         query = """
         SELECT 
@@ -114,18 +110,34 @@ class NotificacionesService:
             nt.cuerpo as cuerpo_default
         FROM Notificaciones n
         LEFT JOIN Notificaciones_Tipo nt ON n.IdTipoNotificacion = nt.IdTipoNotificacion
-        WHERE n.Estado = 'pendiente'
-          AND (n.Fecha_Programada IS NULL OR n.Fecha_Programada <= GETDATE())
-        ORDER BY n.Fecha_Programada ASC, n.Fecha_Envio ASC, n.IdNotificacion ASC
+        WHERE (n.Fecha_Programada IS NULL OR CAST(n.Fecha_Programada AS DATE) <= CAST(GETDATE() AS DATE))  -- FILTRO PRIMARIO: Solo fechas válidas (hoy o anterior - sin hora)
+          AND n.Estado = 'pendiente'  -- FILTRO SECUNDARIO: Solo notificaciones pendientes
+        ORDER BY 
+            CASE WHEN n.Fecha_Programada IS NULL THEN 0 ELSE 1 END,  -- Prioridad: inmediatas primero
+            n.Fecha_Programada ASC,  -- Luego por fecha programada
+            n.IdNotificacion ASC     -- Finalmente por ID
         """
         
         try:
+            logger.info("🔍 Buscando notificaciones pendientes para hoy (solo fecha, ignora hora)...")
+            
             resultados = db_config.execute_query(query)
+            
+            if not resultados:
+                logger.info("ℹ️ No hay notificaciones pendientes para procesar")
+                return []
+            
+            logger.info(f"📋 Encontradas {len(resultados)} notificaciones para procesar")
             
             # Procesar cada notificación para completar campos faltantes
             notificaciones_procesadas = []
             for notif in resultados:
-                # Completar campos faltantes con los valores por defecto del tipo
+                
+                # VALIDACIÓN EXTRA: Verificar que realmente esté pendiente
+                if notif['Estado'] != 'pendiente':
+                    logger.error(f"🚨 Notificación {notif['IdNotificacion']} tiene estado '{notif['Estado']}' - SALTANDO")
+                    continue
+                
                 # Combinar destinatarios individuales y del tipo
                 destinatarios_individuales = notif['Destinatario'] or ''
                 destinatarios_tipo = notif['destinatarios_default'] or ''
@@ -183,27 +195,56 @@ class NotificacionesService:
     @staticmethod
     def actualizar_estado_notificacion(id_notificacion, nuevo_estado):
         """
-        Actualiza el estado de una notificación.
-        Estados posibles: 'pendiente', 'enviado', 'error'
+        Actualiza el estado de una notificación de forma segura.
+        Solo permite cambios desde estado 'pendiente' a otros estados.
+        Estados válidos: 'pendiente' → 'enviado', 'error', 'parcial'
         """
-        query = """
-        UPDATE Notificaciones 
-        SET Estado = ?, Fecha_Envio = GETDATE()
+        # Primero verificar el estado actual
+        query_verificar = """
+        SELECT Estado, Fecha_Programada, Asunto 
+        FROM Notificaciones 
         WHERE IdNotificacion = ?
         """
         
         try:
-            db_config.execute_non_query(query, [nuevo_estado, id_notificacion])
-            logger.info(f"Estado de notificación {id_notificacion} actualizado a: {nuevo_estado}")
-            return True
+            resultado_actual = db_config.execute_query(query_verificar, [id_notificacion])
+            
+            if not resultado_actual:
+                logger.error(f"❌ Notificación {id_notificacion} no encontrada")
+                return False
+            
+            estado_previo = resultado_actual[0]['Estado']
+            fecha_prog = resultado_actual[0]['Fecha_Programada']
+            asunto = resultado_actual[0]['Asunto']
+            
+            # VALIDACIÓN CRÍTICA: Solo permitir cambios desde 'pendiente'
+            if estado_previo != 'pendiente':
+                logger.warning(f"🚨 ID {id_notificacion}: No se puede cambiar estado '{estado_previo}' → '{nuevo_estado}'")
+                return False
+            
+            # Actualizar solo si el estado actual es 'pendiente'
+            query_actualizar = """
+            UPDATE Notificaciones 
+            SET Estado = ?, Fecha_Envio = GETDATE()
+            WHERE IdNotificacion = ? AND Estado = 'pendiente'
+            """
+            
+            filas_afectadas = db_config.execute_non_query(query_actualizar, [nuevo_estado, id_notificacion])
+            
+            if filas_afectadas > 0:
+                return True
+            else:
+                logger.warning(f"⚠️ No se pudo actualizar ID {id_notificacion} - Estado cambió")
+                return False
+                
         except Exception as e:
-            logger.error(f"Error al actualizar estado de notificación {id_notificacion}: {e}")
+            logger.error(f"❌ Error actualizando ID {id_notificacion}: {e}")
             return False
     
     @staticmethod
     def registrar_auditoria(id_notificacion, accion, descripcion, usuario='sistema'):
         """
-        Se debe registrar una entrada en la tabla de auditoría.
+        Registra entrada en auditoría
         """
         query = """
         INSERT INTO Auditoria (accion, detalle, fecha_aud, [user])
@@ -211,12 +252,9 @@ class NotificacionesService:
         """
         
         try:
-            # Incluir el ID de notificación en el detalle para referencia
-            detalle_completo = f"ID_Notificacion: {id_notificacion} - {descripcion}"
-            
+            detalle_completo = f"ID_{id_notificacion}: {descripcion}"
             db_config.execute_non_query(query, [accion, detalle_completo, usuario])
-            logger.info(f"Auditoría registrada para notificación {id_notificacion}: {accion}")
             return True
         except Exception as e:
-            logger.error(f"Error al registrar auditoría para notificación {id_notificacion}: {e}")
+            logger.error(f"❌ Error en auditoría ID {id_notificacion}: {e}")
             return False

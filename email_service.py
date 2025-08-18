@@ -25,17 +25,36 @@ class EmailService:
             return False
 
         try:
+            logger.info(f"🔍 Iniciando conexión SMTP a {self.smtp_server}:{self.smtp_port}")
+            
             msg = MIMEText(cuerpo, 'html')
             msg['Subject'] = asunto
             msg['From'] = formataddr(("Sistema de Notificaciones", os.getenv('SMTP_USER'))) #Aqui deben cambiar con la config del servidor SMTP
             msg['To'] = destinatario
 
-            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
+            # SOLUCION: Agregar timeout de 30 segundos
+            with smtplib.SMTP(self.smtp_server, self.smtp_port, timeout=30) as server:
+                logger.info("🔒 Iniciando TLS...")
                 server.starttls()
+                
+                logger.info("🔑 Iniciando autenticación...")
                 server.login(self.smtp_user, self.smtp_password)
+                
+                logger.info(f"📧 Enviando email a {destinatario}...")
                 server.sendmail(self.smtp_user, destinatario, msg.as_string())
             
+            logger.info(f"✅ Email enviado exitosamente a {destinatario}")
             return True
+            
+        except smtplib.SMTPAuthenticationError as e:
+            logger.error(f"❌ Error de autenticación SMTP: {str(e)}")
+            return False
+        except smtplib.SMTPConnectError as e:
+            logger.error(f"❌ Error de conexión SMTP: {str(e)}")
+            return False
+        except smtplib.SMTPException as e:
+            logger.error(f"❌ Error SMTP general: {str(e)}")
+            return False
         except Exception as e:
-            logger.error(f"Error enviando email a {destinatario}: {str(e)}")
+            logger.error(f"❌ Error enviando email a {destinatario}: {str(e)}")
             return False
