@@ -29,8 +29,22 @@ class ProcesadorNotificaciones:
                 
                 logger.info(f"Enviando ID {notif['IdNotificacion']} → {notif['destinatarios']}")
                 
-                # Enviar email a múltiples destinatarios
-                destinatarios_lista = [email.strip() for email in notif['destinatarios'].split(',') if email.strip()]
+                # Función para procesar múltiples separadores (igual que arriba)
+                def procesar_emails(texto_emails):
+                    """Procesa emails separados por coma O punto y coma"""
+                    if not texto_emails or not texto_emails.strip():
+                        return []
+                    
+                    # Detectar el separador principal (punto y coma tiene prioridad)
+                    if ';' in texto_emails:
+                        separador = ';'
+                    else:
+                        separador = ','
+                    
+                    return [email.strip() for email in texto_emails.split(separador) if email.strip()]
+                
+                # Enviar email a múltiples destinatarios usando la función mejorada
+                destinatarios_lista = procesar_emails(notif['destinatarios'])
                 exitos = 0
                 errores = []
                 
@@ -44,13 +58,12 @@ class ProcesadorNotificaciones:
                         
                         if exito_individual:
                             exitos += 1
-                            logger.info(f"Email enviado exitosamente a: {destinatario}")
                         else:
                             errores.append(f"Error enviando a {destinatario}")
                             
                     except Exception as e:
                         errores.append(f"Error enviando a {destinatario}: {str(e)}")
-                        logger.error(f"Error enviando email a {destinatario}: {str(e)}")
+                        logger.error(f"❌ Error enviando a {destinatario}: {str(e)}")
                 
                 # Determinar si el envío fue exitoso (al menos uno exitoso)
                 exito_general = exitos > 0
@@ -142,12 +155,24 @@ class NotificacionesService:
                 destinatarios_individuales = notif['Destinatario'] or ''
                 destinatarios_tipo = notif['destinatarios_default'] or ''
                 
-                # Crear lista de destinatarios únicos
+                # Función para procesar múltiples separadores
+                def procesar_destinatarios(texto_destinatarios):
+                    """Procesa destinatarios separados por coma O punto y coma"""
+                    if not texto_destinatarios or not texto_destinatarios.strip():
+                        return []
+                    
+                    # Detectar el separador principal (punto y coma tiene prioridad)
+                    if ';' in texto_destinatarios:
+                        separador = ';'
+                    else:
+                        separador = ','
+                    
+                    return [email.strip() for email in texto_destinatarios.split(separador) if email.strip()]
+                
+                # Crear lista de destinatarios únicos usando la función mejorada
                 todos_destinatarios = []
-                if destinatarios_individuales.strip():
-                    todos_destinatarios.extend([email.strip() for email in destinatarios_individuales.split(',') if email.strip()])
-                if destinatarios_tipo.strip():
-                    todos_destinatarios.extend([email.strip() for email in destinatarios_tipo.split(',') if email.strip()])
+                todos_destinatarios.extend(procesar_destinatarios(destinatarios_individuales))
+                todos_destinatarios.extend(procesar_destinatarios(destinatarios_tipo))
                 
                 # Eliminar duplicados manteniendo el orden
                 destinatarios_unicos = []

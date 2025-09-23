@@ -435,7 +435,7 @@ def crear_dashboard_dash():
                     dcc.Input(
                         id='destinatarios-input',
                         type='email',
-                        placeholder='email1@ejemplo.com, email2@ejemplo.com',
+                        placeholder='email1@ejemplo.com; email2@ejemplo.com (use ; o , como separador)',
                         style={'width': '100%', 'marginBottom': '15px', 'padding': '8px'}
                     ),
                     

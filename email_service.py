@@ -25,7 +25,7 @@ class EmailService:
             return False
 
         try:
-            logger.info(f"🔍 Iniciando conexión SMTP a {self.smtp_server}:{self.smtp_port}")
+            logger.info(f"🔍 Conectando SMTP {self.smtp_server}:{self.smtp_port}")
             
             msg = MIMEText(cuerpo, 'html')
             msg['Subject'] = asunto
@@ -34,16 +34,10 @@ class EmailService:
 
             # SOLUCION: Agregar timeout de 30 segundos
             with smtplib.SMTP(self.smtp_server, self.smtp_port, timeout=30) as server:
-                logger.info("🔒 Iniciando TLS...")
                 server.starttls()
-                
-                logger.info("🔑 Iniciando autenticación...")
                 server.login(self.smtp_user, self.smtp_password)
-                
-                logger.info(f"📧 Enviando email a {destinatario}...")
                 server.sendmail(self.smtp_user, destinatario, msg.as_string())
             
-            logger.info(f"✅ Email enviado exitosamente a {destinatario}")
             return True
             
         except smtplib.SMTPAuthenticationError as e:
