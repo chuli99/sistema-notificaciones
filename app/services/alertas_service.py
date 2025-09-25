@@ -1,8 +1,7 @@
-from database_config import db_config
+from app.utils.database_config import db_config
 import logging
 from datetime import datetime
-from email_service import EmailService
-
+from app.services.email_service import EmailService
 logger = logging.getLogger(__name__)
 email_service = EmailService()
 
@@ -53,7 +52,8 @@ class ProcesadorNotificaciones:
                         exito_individual = email_service.enviar_email(
                             destinatario=destinatario,
                             asunto=notif['asunto'],
-                            cuerpo=notif['cuerpo']
+                            cuerpo=notif['cuerpo'],
+                            notification_id=notif['IdNotificacion']  # Agregar ID para botones
                         )
                         
                         if exito_individual:

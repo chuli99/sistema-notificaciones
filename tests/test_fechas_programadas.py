@@ -6,7 +6,7 @@ Script para probar la funcionalidad de fechas programadas
 import logging
 from datetime import datetime, timedelta
 from database_config import db_config
-from alertas_service import ProcesadorNotificaciones
+from app.services.alertas_service import ProcesadorNotificaciones
 
 logger = logging.getLogger(__name__)
 

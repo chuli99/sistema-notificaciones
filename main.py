@@ -1,5 +1,5 @@
-from alertas_service import ProcesadorNotificaciones
-from dashboard_plotly import get_app
+from app.services.alertas_service import ProcesadorNotificaciones
+from app.web.dashboard_plotly import get_app
 import time
 import logging
 import threading

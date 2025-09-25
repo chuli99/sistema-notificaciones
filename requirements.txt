@@ -12,6 +12,9 @@ plotly==5.17.0
 # Dashboard web
 dash==2.14.0
 
+# Servidor web para acciones de email
+flask==2.3.3
+
 # Logging y utilidades
 logging==0.4.9.6
 

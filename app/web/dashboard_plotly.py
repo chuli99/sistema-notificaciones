@@ -4,7 +4,7 @@ from plotly.subplots import make_subplots
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from database_config import db_config
+from app.utils.database_config import db_config
 import logging
 import dash
 from dash import dcc, html, Input, Output, callback, State
