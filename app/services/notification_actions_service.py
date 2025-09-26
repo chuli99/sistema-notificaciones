@@ -116,7 +116,7 @@ class NotificationActionsService:
             rows_affected = db_config.execute_non_query(query_update_main, [notification_id, token])
             
             if rows_affected > 0:
-                # Cancelar todas las notificaciones relacionadas con el mismo Source_IdNotificacion
+                # Cancelar solo las notificaciones relacionadas que estén en estado 'pendiente'
                 related_cancelled = 0
                 if source_id is not None:
                     query_update_related = """
@@ -124,14 +124,16 @@ class NotificationActionsService:
                     SET Estado = 'cancelado', 
                         cancelled_at = GETDATE()
                     WHERE Source_IdNotificacion = ? 
-                      AND Estado != 'cancelado'
+                      AND Estado = 'pendiente'
                       AND IdNotificacion != ?
                     """
                     
                     related_cancelled = db_config.execute_non_query(query_update_related, [source_id, notification_id])
                     
                     if related_cancelled > 0:
-                        logger.info(f"✅ Se cancelaron {related_cancelled} notificaciones relacionadas con Source_IdNotificacion: {source_id}")
+                        logger.info(f"✅ Se cancelaron {related_cancelled} notificaciones relacionadas en estado 'pendiente' con Source_IdNotificacion: {source_id}")
+                    else:
+                        logger.info(f"ℹ️ No se encontraron notificaciones relacionadas en estado 'pendiente' para Source_IdNotificacion: {source_id}")
                 
                 # Registrar en auditoría la cancelación principal
                 NotificationActionsService.log_action(
@@ -145,13 +147,13 @@ class NotificationActionsService:
                     NotificationActionsService.log_action(
                         notification_id, 
                         'RELATED_NOTIFICATIONS_CANCELLED', 
-                        f'Se cancelaron {related_cancelled} notificaciones relacionadas con Source_IdNotificacion: {source_id}'
+                        f'Se cancelaron {related_cancelled} notificaciones relacionadas en estado PENDIENTE con Source_IdNotificacion: {source_id}'
                     )
                 
                 # Preparar mensaje de respuesta
                 total_cancelled = 1 + related_cancelled
                 if related_cancelled > 0:
-                    message = f'❌ Notificación cancelada correctamente. También se cancelaron {related_cancelled} notificaciones relacionadas (Total: {total_cancelled})'
+                    message = f'❌ Notificación cancelada correctamente. También se cancelaron {related_cancelled} notificaciones relacionadas en estado PENDIENTE (Total: {total_cancelled})'
                 else:
                     message = '❌ Notificación cancelada correctamente'
                 
