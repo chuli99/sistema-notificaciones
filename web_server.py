@@ -215,6 +215,8 @@ def mark_notification_resolved(notification_id):
         timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     ), status_code
 
+
+
 @app.route('/notifications/<int:notification_id>/status')
 def get_status(notification_id):
     """Obtiene el estado de una notificación (para debugging)"""

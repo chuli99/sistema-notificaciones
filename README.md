@@ -6,9 +6,10 @@ Sistema automatizado para el procesamiento y envío de notificaciones por email 
 ## Características
 
 - **Procesamiento automático** de notificaciones pendientes
-- **Envío de emails** con configuración SMTP
+- **Envío de emails** con configuración SMTP y botones de acción
 - **Dashboard interactivo** con gráficos de tendencias y estados
 - **Auditoría completa** de todas las operaciones
+- **Botones interactivos** en emails: Recibido, Resuelto (con cascada), Cancelar (con cascada)
 
 ## Estructura del Proyecto
 
@@ -72,7 +73,22 @@ El sistema requiere las siguientes tablas:
 
 - **pendiente** - Esperando ser procesada
 - **enviado** - Enviada exitosamente
+- **recibido** - Confirmada como recibida por el usuario
+- **resuelto** - Marcada como resuelta por el usuario
+- **cancelado** - Cancelada por el usuario
 - **error** - Error en el envío
+
+## Funcionalidad de Cascada por IdAlerta
+
+Cuando se usa el botón **"Resuelto"** o **"Cancelar"** en un email, el sistema actualiza automáticamente todas las notificaciones **pendientes** que comparten el mismo `IdAlerta`. Esta funcionalidad permite:
+
+- ✅ Resolución automática de alertas pendientes relacionadas
+- ❌ Cancelación automática de alertas pendientes relacionadas  
+- 📧 Funciona con los botones existentes (sin agregar nuevos)
+- 📊 Auditoría completa de operaciones en cascada
+- ⚡ Optimización con índices en base de datos
+
+**Ver**: `doc/Funcionalidad_Cascada_IdAlerta.md` para documentación completa.
 
 ## Logs y Monitoreo
 

@@ -129,7 +129,7 @@ class EmailService:
         """Construye el email con botones de acción"""
         action_buttons = f"""
         <div style="margin: 30px 0; text-align: center; border-top: 1px solid #eee; padding-top: 20px;">
-            <p style="color: #666; margin-bottom: 15px; font-size: 14px;">¿Fue útil esta notificación?</p>
+            <p style="color: #666; margin-bottom: 15px; font-size: 14px;">Utilizar botones en la Red de Masa o vía VPN</p>
             <table cellpadding="0" cellspacing="0" style="margin: 0 auto;">
                 <tr>
                     <td style="padding: 0 8px;">
@@ -153,7 +153,8 @@ class EmailService:
                 </tr>
             </table>
             <p style="color: #999; font-size: 12px; margin-top: 15px;">
-                Los enlaces expiran en 7 días desde el envío de este email.
+                Los enlaces expiran en 7 días desde el envío de este email.<br>
+                <strong>Nota:</strong> Al marcar como Resuelto o Cancelar, se actualizarán automáticamente todas las notificaciones pendientes relacionadas.
             </p>
         </div>
         """
