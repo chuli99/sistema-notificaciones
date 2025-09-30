@@ -188,6 +188,33 @@ def cancel_notification(notification_id):
         timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     ), status_code
 
+@app.route('/notifications/<int:notification_id>/resolved')
+def mark_notification_resolved(notification_id):
+    """Maneja la acción de marcar notificación como resuelta"""
+    token = request.args.get('token')
+    
+    if not token:
+        return render_template_string(RESULT_TEMPLATE,
+            result_type='error', 
+            message='Token de seguridad requerido',
+            details='El enlace parece estar incompleto o dañado.',
+            timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        ), 400
+    
+    logger.info(f"Procesando resolución - ID: {notification_id}")
+    
+    # Procesar la acción
+    result = NotificationActionsService.mark_as_resolved(notification_id, token)
+    
+    status_code = 200 if result['success'] else 400
+    
+    return render_template_string(RESULT_TEMPLATE,
+        result_type=result['type'],
+        message=result['message'], 
+        details=f'Notificación ID: {notification_id}' if result['success'] else None,
+        timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    ), status_code
+
 @app.route('/notifications/<int:notification_id>/status')
 def get_status(notification_id):
     """Obtiene el estado de una notificación (para debugging)"""
@@ -197,9 +224,9 @@ def get_status(notification_id):
         return {
             'notification_id': notification_id,
             'estado': status['Estado'],
-            'marked_received_at': str(status['marked_received_at']) if status['marked_received_at'] else None,
-            'cancelled_at': str(status['cancelled_at']) if status['cancelled_at'] else None,
-            'expires_at': str(status['expires_at']) if status['expires_at'] else None,
+            'marked_received_at': str(status['FechaRecibido']) if status['FechaRecibido'] else None,
+            'cancelled_at': str(status['FechaCancelacion']) if status['FechaCancelacion'] else None,
+            'expires_at': str(status['FechaExpiracion']) if status['FechaExpiracion'] else None,
             'subject': status['Asunto'],
             'recipient': status['Destinatario']
         }

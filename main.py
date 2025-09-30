@@ -61,8 +61,6 @@ if __name__ == "__main__":
     try:
         while True:
             try:
-                ciclo += 1
-                logger.info(f"🔄 === CICLO {ciclo} === {time.strftime('%H:%M:%S')} ===")
                 
                 start_time = time.time()
                 logger.info("🔍 Iniciando procesamiento de notificaciones...")
@@ -70,10 +68,10 @@ if __name__ == "__main__":
                 ProcesadorNotificaciones.procesar_pendientes()
                 
                 end_time = time.time()
-                logger.info(f"✅ Ciclo {ciclo} completado en {end_time - start_time:.2f} segundos")
+                logger.info(f"✅ Ciclo completado en {end_time - start_time:.2f} segundos")
                 
             except Exception as e:
-                logger.error(f"❌ Error en ciclo {ciclo}: {e}")
+                logger.error(f"❌ Error en ciclo: {e}")
                 logger.info("⚠️ Continuando con el siguiente ciclo...")
             
             logger.info("⏳ Esperando 60 segundos para el siguiente ciclo...")

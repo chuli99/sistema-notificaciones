@@ -13,16 +13,18 @@ class NotificationActionsService:
     def mark_as_received(notification_id, token):
         """
         Marca una notificación como recibida usando el token de seguridad
+        Permite múltiples destinatarios con el mismo token
         """
         try:
             # Verificar token válido y no expirado
+            # Permitir si está en estado 'enviado' o si ya está 'recibido' (para múltiples destinatarios)
             query_verify = """
-            SELECT IdNotificacion, Estado, expires_at, Asunto
+            SELECT IdNotificacion, Estado, FechaExpiracion, Asunto
             FROM Notificaciones 
             WHERE IdNotificacion = ? 
-              AND action_token = ? 
-              AND expires_at > GETDATE()
-              AND Estado = 'enviado'
+              AND TokenRespuesta = ? 
+              AND FechaExpiracion > GETDATE()
+              AND Estado IN ('enviado', 'recibido')
             """
             
             result = db_config.execute_query(query_verify, [notification_id, token])
@@ -35,17 +37,29 @@ class NotificationActionsService:
                     'type': 'error'
                 }
             
-            # Actualizar estado a "recibido"
+            # Si ya está marcado como recibido, solo registrar la acción sin cambiar estado
+            current_state = result[0]['Estado']
+            
+            if current_state == 'recibido':
+                # Ya está marcado como recibido por otro destinatario
+                logger.info(f"✅ Notificación {notification_id} ya estaba marcada como recibida")
+                return {
+                    'success': True,
+                    'message': '✅ Notificación ya estaba marcada como recibida',
+                    'type': 'success'
+                }
+            
+            # Actualizar estado a "recibido" solo si no estaba ya marcado
             query_update = """
             UPDATE Notificaciones 
             SET Estado = 'recibido', 
-                marked_received_at = GETDATE()
-            WHERE IdNotificacion = ? AND action_token = ?
+                FechaRecibido = CASE WHEN FechaRecibido IS NULL THEN GETDATE() ELSE FechaRecibido END
+            WHERE IdNotificacion = ? AND TokenRespuesta = ? AND Estado = 'enviado'
             """
             
             rows_affected = db_config.execute_non_query(query_update, [notification_id, token])
             
-            if rows_affected > 0:
+            if rows_affected >= 0:  # Cambio: >= 0 en lugar de > 0 para manejar casos donde ya estaba marcado
                 # Registrar en auditoría
                 NotificationActionsService.log_action(
                     notification_id, 
@@ -75,21 +89,102 @@ class NotificationActionsService:
             }
     
     @staticmethod
+    def mark_as_resolved(notification_id, token):
+        """
+        Marca una notificación como resuelta usando el token de seguridad
+        Permite múltiples destinatarios con el mismo token
+        """
+        try:
+            # Verificar token válido y no expirado
+            # Permitir si está en estado 'enviado', 'recibido' o ya 'resuelto' (para múltiples destinatarios)
+            query_verify = """
+            SELECT IdNotificacion, Estado, FechaExpiracion, Asunto
+            FROM Notificaciones 
+            WHERE IdNotificacion = ? 
+              AND TokenRespuesta = ? 
+              AND FechaExpiracion > GETDATE()
+              AND Estado IN ('enviado', 'recibido', 'resuelto')
+            """
+            
+            result = db_config.execute_query(query_verify, [notification_id, token])
+            
+            if not result:
+                logger.warning(f"Token inválido o expirado para notificación {notification_id}")
+                return {
+                    'success': False, 
+                    'message': 'El enlace ha expirado o no es válido',
+                    'type': 'error'
+                }
+            
+            # Si ya está marcado como resuelto, solo registrar la acción sin cambiar estado
+            current_state = result[0]['Estado']
+            
+            if current_state == 'resuelto':
+                # Ya está marcado como resuelto por otro destinatario
+                logger.info(f"✅ Notificación {notification_id} ya estaba marcada como resuelta")
+                return {
+                    'success': True,
+                    'message': '✅ Notificación ya estaba marcada como resuelta',
+                    'type': 'success'
+                }
+            
+            # Actualizar estado a "resuelto" solo si no estaba ya marcado
+            query_update = """
+            UPDATE Notificaciones 
+            SET Estado = 'resuelto', 
+                FechaResuelto = CASE WHEN FechaResuelto IS NULL THEN GETDATE() ELSE FechaResuelto END
+            WHERE IdNotificacion = ? AND TokenRespuesta = ? AND Estado IN ('enviado', 'recibido')
+            """
+            
+            rows_affected = db_config.execute_non_query(query_update, [notification_id, token])
+            
+            if rows_affected >= 0:  # Cambio: >= 0 en lugar de > 0 para manejar casos donde ya estaba marcado
+                # Registrar en auditoría
+                NotificationActionsService.log_action(
+                    notification_id, 
+                    'NOTIFICACION_RESUELTA',
+                    f"Notificación marcada como resuelta: {result[0]['Asunto']}"
+                )
+                
+                logger.info(f"Notificación {notification_id} marcada como resuelta exitosamente")
+                return {
+                    'success': True,
+                    'message': 'La notificación ha sido marcada como resuelta correctamente',
+                    'type': 'success'
+                }
+            else:
+                return {
+                    'success': False,
+                    'message': 'No se pudo actualizar la notificación',
+                    'type': 'error'
+                }
+                
+        except Exception as e:
+            logger.error(f"Error marcando notificación {notification_id} como resuelta: {e}")
+            return {
+                'success': False,
+                'message': 'Error interno del sistema',
+                'type': 'error'
+            }
+    
+    @staticmethod
     def cancel_notification(notification_id, token):
         """
         Cancela una notificación usando el token de seguridad.
+        Permite múltiples destinatarios con el mismo token.
         Cuando una notificación se cancela, también cancela todas las notificaciones
         con el mismo Source_IdNotificacion.
         """
         try:
             # Verificar token válido y no expirado
+            # Permitir cancelación incluso si ya está cancelada (para múltiples destinatarios)
             query_verify = """
-            SELECT IdNotificacion, Estado, expires_at, Asunto, Source_IdNotificacion
+            SELECT IdNotificacion, Estado, FechaExpiracion, Asunto, Source_IdNotificacion
             FROM Notificaciones 
             WHERE IdNotificacion = ? 
-              AND action_token = ? 
-              AND expires_at > GETDATE()
-              AND Estado = 'enviado'
+              AND TokenRespuesta = ? 
+              AND FechaExpiracion > GETDATE()
+              AND Estado IN ('enviado', 'recibido', 'cancelado')
             """
             
             result = db_config.execute_query(query_verify, [notification_id, token])
@@ -103,26 +198,36 @@ class NotificationActionsService:
                 }
             
             notification_data = result[0]
+            current_state = notification_data['Estado']
             source_id = notification_data['Source_IdNotificacion']
             
-            # Cancelar la notificación principal
+            # Si ya está cancelada, solo registrar la acción sin cambiar estado
+            if current_state == 'cancelado':
+                logger.info(f"✅ Notificación {notification_id} ya estaba cancelada")
+                return {
+                    'success': True,
+                    'message': '✅ Notificación ya estaba cancelada',
+                    'type': 'success'
+                }
+            
+            # Cancelar la notificación principal solo si no estaba cancelada
             query_update_main = """
             UPDATE Notificaciones 
             SET Estado = 'cancelado', 
-                cancelled_at = GETDATE()
-            WHERE IdNotificacion = ? AND action_token = ?
+                FechaCancelacion = CASE WHEN FechaCancelacion IS NULL THEN GETDATE() ELSE FechaCancelacion END
+            WHERE IdNotificacion = ? AND TokenRespuesta = ? AND Estado IN ('enviado', 'recibido')
             """
             
             rows_affected = db_config.execute_non_query(query_update_main, [notification_id, token])
             
-            if rows_affected > 0:
+            if rows_affected >= 0:  # Cambio: >= 0 en lugar de > 0 para manejar casos donde ya estaba marcado
                 # Cancelar solo las notificaciones relacionadas que estén en estado 'pendiente'
                 related_cancelled = 0
                 if source_id is not None:
                     query_update_related = """
                     UPDATE Notificaciones 
                     SET Estado = 'cancelado', 
-                        cancelled_at = GETDATE()
+                        FechaCancelacion = GETDATE()
                     WHERE Source_IdNotificacion = ? 
                       AND Estado = 'pendiente'
                       AND IdNotificacion != ?
@@ -187,8 +292,8 @@ class NotificationActionsService:
         """
         try:
             query = """
-            SELECT IdNotificacion, Estado, marked_received_at, cancelled_at, 
-                   expires_at, Asunto, Destinatario
+            SELECT IdNotificacion, Estado, FechaRecibido, FechaCancelacion, 
+                   FechaExpiracion, FechaResuelto, Asunto, Destinatario
             FROM Notificaciones 
             WHERE IdNotificacion = ?
             """
@@ -231,10 +336,11 @@ class NotificationActionsService:
             SELECT 
                 Estado,
                 COUNT(*) as count,
-                COUNT(CASE WHEN marked_received_at IS NOT NULL THEN 1 END) as received_count,
-                COUNT(CASE WHEN cancelled_at IS NOT NULL THEN 1 END) as cancelled_count
+                COUNT(CASE WHEN FechaRecibido IS NOT NULL THEN 1 END) as received_count,
+                COUNT(CASE WHEN FechaResuelto IS NOT NULL THEN 1 END) as resolved_count,
+                COUNT(CASE WHEN FechaCancelacion IS NOT NULL THEN 1 END) as cancelled_count
             FROM Notificaciones 
-            WHERE action_token IS NOT NULL
+            WHERE TokenRespuesta IS NOT NULL
             GROUP BY Estado
             """
             

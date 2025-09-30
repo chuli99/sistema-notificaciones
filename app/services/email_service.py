@@ -32,16 +32,12 @@ class EmailService:
         try:
             logger.info(f"🔍 Conectando SMTP {self.smtp_server}:{self.smtp_port}")
             
-            # Generar token y fecha de expiración si es necesario
+            # Obtener o generar token para la notificación
             if notification_id:
-                action_token = self.generate_action_token()
-                expires_at = datetime.now() + timedelta(days=7)
-                
-                # Guardar token en base de datos
-                self.save_action_token(notification_id, action_token, expires_at)
+                token_respuesta = self.get_or_create_action_token(notification_id)
                 
                 # Agregar botones al cuerpo del email
-                cuerpo = self.build_email_with_actions(cuerpo, notification_id, action_token)
+                cuerpo = self.build_email_with_actions(cuerpo, notification_id, token_respuesta)
             
             msg = MIMEText(cuerpo, 'html')
             msg['Subject'] = asunto
@@ -73,16 +69,59 @@ class EmailService:
         """Genera un token seguro para las acciones de email"""
         return secrets.token_urlsafe(32)
     
-    def save_action_token(self, notification_id, token, expires_at):
-        """Guarda el token de acción en la base de datos"""
+    def get_or_create_action_token(self, notification_id):
+        """
+        Obtiene el token existente para una notificación o crea uno nuevo si no existe.
+        PRIMERO verifica si existe, LUEGO genera uno nuevo solo si es necesario.
+        """
         try:
+            # PASO 1: Verificar si ya existe un token en la base de datos
+            query_check_existing = """
+            SELECT TokenRespuesta, FechaExpiracion 
+            FROM Notificaciones 
+            WHERE IdNotificacion = ? AND TokenRespuesta IS NOT NULL
+            """
+            
+            result = db_config.execute_query(query_check_existing, [notification_id])
+            
+            if result and len(result) > 0:
+                # YA EXISTE UN TOKEN - reutilizarlo
+                existing_token = result[0]['TokenRespuesta']
+                logger.info(f"✅ Reutilizando token existente para notificación {notification_id}: {existing_token[:10]}...")
+                return existing_token
+            
+            # PASO 2: No existe token, crear uno nuevo
+            logger.info(f"🔑 No existe token para notificación {notification_id}, creando uno nuevo...")
+            nuevo_token = self.generate_action_token()
+            fecha_expiracion = datetime.now() + timedelta(days=7)
+            
+            # Guardar el nuevo token en la base de datos
+            self.save_action_token(notification_id, nuevo_token, fecha_expiracion)
+            
+            logger.info(f"🔑 Nuevo token creado para notificación {notification_id}: {nuevo_token[:10]}...")
+            return nuevo_token
+                
+        except Exception as e:
+            logger.error(f"Error obteniendo/creando token para notificación {notification_id}: {e}")
+            # Fallback: generar token temporal
+            return self.generate_action_token()
+    
+    def save_action_token(self, notification_id, token, fecha_expiracion):
+        """Guarda el token de acción en la base de datos SOLO si no existe ya uno"""
+        try:
+            # Solo actualizar si TokenRespuesta es NULL (no existe todavía)
             query = """
             UPDATE Notificaciones 
-            SET action_token = ?, expires_at = ?
-            WHERE IdNotificacion = ?
+            SET TokenRespuesta = ?, FechaExpiracion = ?
+            WHERE IdNotificacion = ? AND TokenRespuesta IS NULL
             """
-            db_config.execute_non_query(query, [token, expires_at, notification_id])
-            logger.info(f"Token guardado para notificación {notification_id}")
+            rows_affected = db_config.execute_non_query(query, [token, fecha_expiracion, notification_id])
+            
+            if rows_affected > 0:
+                logger.info(f"✅ Token guardado para notificación {notification_id}")
+            else:
+                logger.info(f"ℹ️ Token ya existía para notificación {notification_id}, no se sobrescribió")
+                
         except Exception as e:
             logger.error(f"Error guardando token: {e}")
     
@@ -93,22 +132,28 @@ class EmailService:
             <p style="color: #666; margin-bottom: 15px; font-size: 14px;">¿Fue útil esta notificación?</p>
             <table cellpadding="0" cellspacing="0" style="margin: 0 auto;">
                 <tr>
-                    <td style="padding: 0 10px;">
+                    <td style="padding: 0 8px;">
                         <a href="{self.base_url}/notifications/{notification_id}/received?token={token}" 
-                           style="background-color: #28a745; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold;">
-                            ✅ Marcar como Recibido
+                           style="background-color: #28a745; color: white; padding: 10px 16px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold; font-size: 13px;">
+                            ✅ Recibido
                         </a>
                     </td>
-                    <td style="padding: 0 10px;">
+                    <td style="padding: 0 8px;">
+                        <a href="{self.base_url}/notifications/{notification_id}/resolved?token={token}" 
+                           style="background-color: #007bff; color: white; padding: 10px 16px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold; font-size: 13px;">
+                            ✅ Resuelto
+                        </a>
+                    </td>
+                    <td style="padding: 0 8px;">
                         <a href="{self.base_url}/notifications/{notification_id}/cancel?token={token}" 
-                           style="background-color: #dc3545; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold;">
-                            ❌ Anular Envío
+                           style="background-color: #dc3545; color: white; padding: 10px 16px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold; font-size: 13px;">
+                            ❌ Cancelar
                         </a>
                     </td>
                 </tr>
             </table>
             <p style="color: #999; font-size: 12px; margin-top: 15px;">
-                Este enlace expira en 7 días. Sistema de Notificaciones.
+                Los enlaces expiran en 7 días desde el envío de este email.
             </p>
         </div>
         """
