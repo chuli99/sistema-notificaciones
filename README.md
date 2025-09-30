@@ -11,23 +11,12 @@ Sistema automatizado para el procesamiento y envío de notificaciones por email 
 - **Auditoría completa** de todas las operaciones
 - **Botones interactivos** en emails: Recibido, Resuelto (con cascada), Cancelar (con cascada)
 
-## Estructura del Proyecto
-
-```
-├── Documentación              # Guardo la documentación del proyecto   
-├── main.py                    # Punto de entrada principal
-├── alertas_service.py         # Lógica de procesamiento de notificaciones
-├── database_config.py         # Configuración y conexión a base de datos
-├── email_service.py           # Servicio de envío de emails
-├── dashboard_plotly.py        # Dashboard de visualización
-└── .env                       # Variables de entorno (crear manualmente)
-```
 
 ## Instalación
 
 1. **Instalar dependencias**:
 ```bash
-pip install pyodbc plotly pandas numpy dash python-dotenv
+.\install.ps1
 ```
 
 2. **Configurar variables de entorno** en archivo `.env`:
@@ -49,17 +38,23 @@ EMAIL_SENDER_NAME=Sistema de Notificaciones
 
 ## Uso
 
+### Ejecucion
+Una vez en el entorno virtual se debe ejecutar:
+```bash
+python main.py
+```
+
 ### Procesamiento de Notificaciones
 ```bash
 python main.py
 ```
 Ejecuta el procesador en bucle continuo, revisando notificaciones pendientes cada 60 segundos.
 
-### Dashboard de Visualización
+### Ejecucion de servidor web
 ```bash
-python dashboard_plotly.py
+python webserver.py
 ```
-Genera gráficos de tendencias y distribución de estados de las notificaciones.
+
 
 ## Base de Datos
 
