@@ -1,22 +1,22 @@
 # Conexión a base de datos
-pyodbc==4.0.39
+pyodbc
 
 # Manejo de variables de entorno
-python-dotenv==1.0.0
+python-dotenv
 
 # Procesamiento de datos y visualización
-pandas==2.1.0
-numpy==1.24.3
-plotly==5.17.0
+pandas
+numpy
+plotly
 
 # Dashboard web
-dash==2.14.0
+dash
 
 # Servidor web para acciones de email
-flask==2.3.3
+flask
 
 # Logging y utilidades
-logging==0.4.9.6
+logging
 
 # Manejo de fechas y tiempos
-datetime==5.2
+datetime
