@@ -68,7 +68,8 @@ if __name__ == "__main__":
                 ProcesadorNotificaciones.procesar_pendientes()
                 
                 end_time = time.time()
-                logger.info(f"✅ Ciclo completado en {end_time - start_time:.2f} segundos")
+                logger.info(f"✅ Ciclo completado en {end_time - start_time:.2f} segundos. Hora: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    
                 
             except Exception as e:
                 logger.error(f"❌ Error en ciclo: {e}")
