@@ -15,3 +15,6 @@ node_modules/
 *.pyd
 __pycache__/
 .Python
+
+# DB.txt
+app/services/PyWhatKit_DB.txt

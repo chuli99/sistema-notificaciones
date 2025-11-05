@@ -104,7 +104,7 @@ class NotificacionesService:
     def obtener_notificaciones_pendientes():
         """
         Obtiene notificaciones que están programadas para HOY (o anterior) y están pendientes.
-        LÓGICA OPTIMIZADA: PRIMERO verifica la fecha (solo día, ignora hora), LUEGO verifica el estado.
+        LÓGICA OPTIMIZADA: PRIMERO verifica la fecha (solo día, ignora hora), LUEGO verifica el estado, FINALMENTE el medio.
         Esto es más intuitivo para usuarios que seleccionan solo fechas en el dashboard.
         """
         query = """
@@ -117,6 +117,7 @@ class NotificacionesService:
             n.Estado,
             n.Fecha_Envio,
             n.Fecha_Programada,
+            n.Medio,
             nt.descripcion as tipo_descripcion,
             nt.destinatarios as destinatarios_default,
             nt.asunto as asunto_default,
@@ -125,6 +126,7 @@ class NotificacionesService:
         LEFT JOIN Notificaciones_Tipo nt ON n.IdTipoNotificacion = nt.IdTipoNotificacion
         WHERE (n.Fecha_Programada IS NULL OR CAST(n.Fecha_Programada AS DATE) <= CAST(GETDATE() AS DATE))  -- FILTRO PRIMARIO: Solo fechas válidas (hoy o anterior - sin hora)
           AND n.Estado = 'pendiente'  -- FILTRO SECUNDARIO: Solo notificaciones pendientes
+          AND (n.Medio = 'Email' OR n.Medio IS NULL)  -- FILTRO TERCIARIO: Solo medio Email (o NULL por defecto)
         ORDER BY 
             CASE WHEN n.Fecha_Programada IS NULL THEN 0 ELSE 1 END,  -- Prioridad: inmediatas primero
             n.Fecha_Programada ASC,  -- Luego por fecha programada

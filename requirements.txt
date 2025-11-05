@@ -20,3 +20,6 @@ logging
 
 # Manejo de fechas y tiempos
 datetime
+
+# Envio de mensajes por WhatsApp
+pywhatkit
