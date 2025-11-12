@@ -2,8 +2,11 @@ from app.utils.database_config import db_config
 import logging
 from datetime import datetime
 from app.services.email_service import EmailService
+from app.services.whatsapp_service import WhatsAppService
+
 logger = logging.getLogger(__name__)
 email_service = EmailService()
+whatsapp_service = WhatsAppService()
 
 class ProcesadorNotificaciones:
     @staticmethod
@@ -94,6 +97,59 @@ class ProcesadorNotificaciones:
                     f"Error: {str(e)}"
                 )
                 logger.error(f"❌ ID {notif['IdNotificacion']}: {str(e)}")
+    
+    @staticmethod
+    def procesar_whatsapp_pendientes():
+        """
+        Procesa todas las notificaciones de WhatsApp pendientes y maneja el envío
+        """
+        logger.info("🚀 Iniciando procesamiento de notificaciones de WhatsApp...")
+        notificaciones = NotificacionesService.obtener_notificaciones_whatsapp_pendientes()
+        
+        if not notificaciones:
+            logger.info("✅ No hay notificaciones de WhatsApp pendientes")
+            return
+        
+        logger.info(f"📱 Procesando {len(notificaciones)} notificaciones de WhatsApp...")
+        
+        for notif in notificaciones:
+            try:
+                # Validación final
+                if 'error' in notif:
+                    raise ValueError(notif['error'])
+                
+                logger.info(f"Enviando WhatsApp ID {notif['IdNotificacion']} → {notif['destinatario']}")
+                
+                # Enviar WhatsApp (sin botones, solo informativo)
+                exito = whatsapp_service.enviar_notificacion(
+                    destinatario=notif['destinatario'],
+                    asunto=notif['asunto'],
+                    cuerpo=notif['cuerpo']
+                )
+                
+                if exito:
+                    # Actualizar estado y auditoría
+                    NotificacionesService.actualizar_estado_notificacion(
+                        notif['IdNotificacion'], 'enviado')
+                    NotificacionesService.registrar_auditoria(
+                        notif['IdNotificacion'], 
+                        'NOTIFICACION_WHATSAPP_ENVIADA',
+                        f"Enviado a {notif['destinatario']}"
+                    )
+                    logger.info(f"✅ WhatsApp ID {notif['IdNotificacion']}: Enviado exitosamente")
+                else:
+                    raise Exception(f"Falló envío de WhatsApp a {notif['destinatario']}")
+                
+            except Exception as e:
+                # Manejo de errores
+                NotificacionesService.actualizar_estado_notificacion(
+                    notif['IdNotificacion'], 'error')
+                NotificacionesService.registrar_auditoria(
+                    notif['IdNotificacion'],
+                    'ERROR_NOTIFICACION_WHATSAPP',
+                    f"Error: {str(e)}"
+                )
+                logger.error(f"❌ WhatsApp ID {notif['IdNotificacion']}: {str(e)}")
 
 class NotificacionesService:
     """
@@ -217,6 +273,91 @@ class NotificacionesService:
             
         except Exception as e:
             logger.error(f"Error al obtener notificaciones pendientes: {e}")
+            return []
+    
+    @staticmethod
+    def obtener_notificaciones_whatsapp_pendientes():
+        """
+        Obtiene notificaciones de WhatsApp que están programadas para HOY (o anterior) y están pendientes.
+        Similar a obtener_notificaciones_pendientes pero filtra por medio WhatsApp.
+        """
+        query = """
+        SELECT 
+            n.IdNotificacion,
+            n.IdTipoNotificacion,
+            n.Asunto,
+            n.Cuerpo,
+            n.Destinatario,
+            n.Estado,
+            n.Fecha_Envio,
+            n.Fecha_Programada,
+            n.Medio,
+            nt.descripcion as tipo_descripcion,
+            nt.asunto as asunto_default,
+            nt.cuerpo as cuerpo_default
+        FROM Notificaciones n
+        LEFT JOIN Notificaciones_Tipo nt ON n.IdTipoNotificacion = nt.IdTipoNotificacion
+        WHERE (n.Fecha_Programada IS NULL OR CAST(n.Fecha_Programada AS DATE) <= CAST(GETDATE() AS DATE))
+          AND n.Estado = 'pendiente'
+          AND n.Medio = 'Whatsapp'  -- Solo WhatsApp
+        ORDER BY 
+            CASE WHEN n.Fecha_Programada IS NULL THEN 0 ELSE 1 END,
+            n.Fecha_Programada ASC,
+            n.IdNotificacion ASC
+        """
+        
+        try:
+            logger.info("🔍 Buscando notificaciones de WhatsApp pendientes...")
+            
+            resultados = db_config.execute_query(query)
+            
+            if not resultados:
+                logger.info("ℹ️ No hay notificaciones de WhatsApp pendientes")
+                return []
+            
+            logger.info(f"📋 Encontradas {len(resultados)} notificaciones de WhatsApp")
+            
+            notificaciones_procesadas = []
+            for notif in resultados:
+                
+                # VALIDACIÓN: Verificar que esté pendiente
+                if notif['Estado'] != 'pendiente':
+                    logger.error(f"🚨 Notificación {notif['IdNotificacion']} tiene estado '{notif['Estado']}' - SALTANDO")
+                    continue
+                
+                # Para WhatsApp, el destinatario es un número de teléfono (NO múltiples)
+                destinatario = (notif['Destinatario'] or '').strip()
+                
+                notif_procesada = {
+                    'IdNotificacion': notif['IdNotificacion'],
+                    'IdTipoNotificacion': notif['IdTipoNotificacion'],
+                    'tipo_descripcion': notif['tipo_descripcion'] or 'Sin tipo',
+                    'asunto': notif['Asunto'] or notif['asunto_default'] or 'Notificación del Sistema',
+                    'cuerpo': notif['Cuerpo'] or notif['cuerpo_default'] or 'Tienes una nueva notificación del sistema.',
+                    'destinatario': destinatario,
+                    'estado': notif['Estado'],
+                    'fecha_envio': notif['Fecha_Envio'],
+                    'fecha_programada': notif['Fecha_Programada'],
+                    'medio': notif['Medio']
+                }
+                
+                # Validar que tenga destinatario
+                if not destinatario:
+                    notif_procesada['error'] = 'Sin número de teléfono configurado'
+                    logger.warning(f"Notificación {notif['IdNotificacion']} sin destinatario")
+                
+                # Validar formato de número (debe empezar con +)
+                elif not destinatario.startswith('+'):
+                    notif_procesada['error'] = f'Número debe incluir código de país: {destinatario}'
+                    logger.warning(f"Notificación {notif['IdNotificacion']} con número inválido: {destinatario}")
+                
+                notificaciones_procesadas.append(notif_procesada)
+            
+            logger.info(f"Se encontraron {len(notificaciones_procesadas)} notificaciones de WhatsApp pendientes")
+            return notificaciones_procesadas
+            
+        except Exception as e:
+            logger.error(f"Error al obtener notificaciones de WhatsApp: {e}")
             return []
     
     @staticmethod

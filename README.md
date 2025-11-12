@@ -1,15 +1,17 @@
 
 # Sistema de Notificaciones
 
-Sistema automatizado para el procesamiento y envío de notificaciones por email con dashboard de visualización.
+Sistema automatizado para el procesamiento y envío de notificaciones por **Email** y **WhatsApp** con dashboard de visualización.
 
 ## Características
 
-- **Procesamiento automático** de notificaciones pendientes
-- **Envío de emails** con configuración SMTP y botones de acción
+- **Procesamiento automático** de notificaciones pendientes cada 1 minuto
+- **Envío de emails** con configuración SMTP y botones de acción interactivos
+- **Envío de WhatsApp** para alertas urgentes (solo mensajes informativos)
 - **Dashboard interactivo** con gráficos de tendencias y estados
 - **Auditoría completa** de todas las operaciones
-- **Botones interactivos** en emails: Recibido, Resuelto (con cascada), Cancelar (con cascada)
+- **Botones interactivos en emails**: Recibido, Resuelto (con cascada), Cancelar (con cascada)
+- **Soporte multi-canal**: Email, WhatsApp (SMS próximamente)
 
 
 ## Instalación
@@ -34,19 +36,43 @@ SMTP_PORT=587
 SMTP_USER=tu_email@gmail.com
 SMTP_PASSWORD=tu_contraseña_app
 EMAIL_SENDER_NAME=Sistema de Notificaciones
+
+# WhatsApp (pywhatkit)
+WHATSAPP_PHONE_NUMBER=+5491234567890
+WHATSAPP_WAIT_TIME=15
+WHATSAPP_CLOSE_TIME=5
+
+# Dashboard
+DASHBOARD_HOST=0.0.0.0
+DASHBOARD_PORT=8050
 ```
 
 ## Uso
 
-### Ejecucion
-Una vez en el entorno virtual se debe ejecutar:
+### Opción 1: Sistema Completo (Email + WhatsApp + Dashboard)
+Ejecuta ambos procesadores y el dashboard:
+```bash
+start_sistema.bat
+```
+O manualmente:
 ```bash
 python main.py
 ```
 
-### Procesamiento de Notificaciones
+### Opción 2: Solo Email
+Procesa únicamente notificaciones de email:
 ```bash
-python main.py
+start_email_only.bat
+```
+
+### Opción 3: Solo WhatsApp
+⚠️ **Requisito**: WhatsApp Web debe estar abierto con sesión activa
+```bash
+start_whatsapp_only.bat
+```
+O manualmente:
+```bash
+python procesar_whatsapp.py
 ```
 Ejecuta el procesador en bucle continuo, revisando notificaciones pendientes cada 60 segundos.
 

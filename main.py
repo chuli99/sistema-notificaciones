@@ -61,18 +61,24 @@ if __name__ == "__main__":
     try:
         while True:
             try:
-                
+                ciclo += 1
                 start_time = time.time()
-                logger.info("🔍 Iniciando procesamiento de notificaciones...")
+                logger.info(f"🔍 Iniciando ciclo #{ciclo} - {time.strftime('%Y-%m-%d %H:%M:%S')}")
                 
+                # Procesar notificaciones de Email
+                logger.info("📧 Procesando notificaciones de Email...")
                 ProcesadorNotificaciones.procesar_pendientes()
                 
+                # Procesar notificaciones de WhatsApp
+                logger.info("📱 Procesando notificaciones de WhatsApp...")
+                ProcesadorNotificaciones.procesar_whatsapp_pendientes()
+                
                 end_time = time.time()
-                logger.info(f"✅ Ciclo completado en {end_time - start_time:.2f} segundos. Hora: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+                logger.info(f"✅ Ciclo #{ciclo} completado en {end_time - start_time:.2f} segundos")
     
                 
             except Exception as e:
-                logger.error(f"❌ Error en ciclo: {e}")
+                logger.error(f"❌ Error en ciclo #{ciclo}: {e}")
                 logger.info("⚠️ Continuando con el siguiente ciclo...")
             
             logger.info("⏳ Esperando 60 segundos para el siguiente ciclo...")
