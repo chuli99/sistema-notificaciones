@@ -36,7 +36,7 @@ class WhatsAppService:
     
     def __init__(self):
         self.numero_default = os.getenv("WHATSAPP_PHONE_NUMBER")
-        self.wait_time = int(os.getenv("WHATSAPP_WAIT_TIME", 30))  # Tiempo de espera antes de escribir
+        self.wait_time = int(os.getenv("WHATSAPP_WAIT_TIME", 50))  # Tiempo de espera antes de escribir
         self.close_time = int(os.getenv("WHATSAPP_CLOSE_TIME", 10))  # Tiempo antes de cerrar pestaña
         self.disponible = PYWHATKIT_DISPONIBLE
         
